@@ -29,6 +29,7 @@ from lxml import etree
 from docx import Document
 import mobi
 import pandas as pd
+from openai import OpenAI
 
 
 def get_docx_title(docx_filename):
@@ -125,33 +126,26 @@ with open('settings.cfg', encoding=encoding) as f:
     config = configparser.ConfigParser()
     config.read_string(config_text)
 
-# 获取openai_apikey和language
-openai_apikey = config.get('option', 'openai-apikey')
+# 获取language
 # language_name = config.get('option', 'target-language')
 prompt = config.get('option', 'prompt')
 bilingual_output = config.get('option', 'bilingual-output')
 language_code = config.get('option', 'langcode')
-api_proxy=config.get('option', 'openai-proxy')
 # Get startpage and endpage as integers with default values
 startpage = config.getint('option', 'startpage', fallback=1)
 endpage = config.getint('option', 'endpage', fallback=-1)
 # 设置译名表文件路径
-transliteration_list_file = config.get('option', 'transliteration-list')
+#transliteration_list_file = config.get('option', 'transliteration-list')
 # 译名表替换是否开启大小写匹配？
 case_matching = config.get('option', 'case-matching')
 
-# 设置openai的API密钥
-openai.api_key = openai_apikey
-
-# 将openai的API密钥分割成数组
-key_array = openai_apikey.split(',')
-
-def random_api_key():
-    return random.choice(key_array)
-
-def create_chat_completion(prompt, text, model="gpt-3.5-turbo", **kwargs):
-    openai.api_key = random_api_key()
-    return openai.ChatCompletion.create(
+def create_chat_completion(prompt, text, model="deepseek-chat"):
+    client = OpenAI(
+        api_key="sk-3736dcfbc90b49f4bdf928a4f28581c7",  
+        base_url="https://api.deepseek.com/beta/v1"
+    )
+    
+    response = client.chat.completions.create(
         model=model,
         messages=[
             {
@@ -159,18 +153,27 @@ def create_chat_completion(prompt, text, model="gpt-3.5-turbo", **kwargs):
                 "content": f"{prompt}: \n{text}",
             }
         ],
-        **kwargs
+        stream=False,
     )
+    
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": response.choices[0].message.content
+                }
+            }
+        ],
+        "usage": {
+            "total_tokens": response.usage.total_tokens
+        }
+    }
 
 import argparse
+ # 设置默认的 Deepseek API 基础 URL
+openai.api_base = "https://api.deepseek.com/beta"
+print("使用 Deepseek API，地址为: " + openai.api_base)
 
-# 如果配置文件有写，就设置api代理
-if len(api_proxy) == 0:
-    print("未检测到OpenAI API 代理，当前使用api地址为: " + openai.api_base)
-else:
-    api_proxy_url = api_proxy + "/v1"
-    openai.api_base = os.environ.get("OPENAI_API_BASE", api_proxy_url)
-    print("正在使用OpenAI API 代理，代理地址为: "+openai.api_base)
 
 # 创建参数解析器
 parser = argparse.ArgumentParser()
@@ -450,8 +453,8 @@ if filename.endswith('.epub'):
             text = re.sub(r"\s+", " ", text)
 
             # 如果设置了译名表替换，则对文本进行翻译前的替换
-            if args.tlist:
-                text = text_replace(text, transliteration_list_file, case_matching)
+            #if args.tlist:
+            #    text = text_replace(text, transliteration_list_file, case_matching)
 
             # 将文本分成不大于1024字符的短文本list
             short_text_list = split_text(text)
@@ -498,8 +501,8 @@ else:
     text = re.sub(r"\s+", " ", text)
 
     # 如果设置了译名表替换，则对文本进行翻译前的替换
-    if args.tlist:
-        text = text_replace(text, transliteration_list_file, case_matching)
+    #if args.tlist:
+    #    text = text_replace(text, transliteration_list_file, case_matching)
 
     # 将文本分成不大于1024字符的短文本list
     short_text_list = split_text(text)
@@ -539,3 +542,4 @@ try:
     print(f"File '{jsonfile}' has been deleted.")
 except FileNotFoundError:
     print(f"File '{jsonfile}' not found. No file was deleted.")
+

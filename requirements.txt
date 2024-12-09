@@ -10,3 +10,4 @@ chardet
 pandas
 lxml
 openpyxl
+openai
